@@ -240,12 +240,21 @@ describe("V2 client presentation", () => {
     const shell = presentThreadShell(environmentId, {
       ...v2ThreadShell,
       providerInstanceId: grok,
+      latestRunId: RunId.make("run-provider-stack"),
       modelSelection: { instanceId: grok, model: "grok-4" },
       providerInstanceHistory: [codex, claude, cursor, grok],
     });
 
     // Three slots: the two most recent earlier owners, then the current one.
     expect(resolveThreadProviderStack(shell)).toEqual([claude, cursor, grok]);
+    // A pending model selection must not replace the runtime's current owner.
+    const selectedCodex = { ...shell, modelSelection: { instanceId: codex, model: "gpt-5" } };
+    expect(resolveThreadProviderStack(selectedCodex)).toEqual([claude, cursor, grok]);
+    expect(resolveThreadProviderStack({ ...selectedCodex, runtime: null })).toEqual([
+      cursor,
+      grok,
+      codex,
+    ]);
     expect(
       resolveThreadProviderStack({ ...shell, providerInstanceHistory: [codex, grok] }),
     ).toEqual([codex, grok]);

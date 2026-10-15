@@ -1,8 +1,11 @@
+import { useAtomValue } from "@effect/atom-react";
 import type { ThreadContextRecord } from "@t3tools/contracts";
 import { Link } from "@tanstack/react-router";
 import { MessagesSquareIcon } from "lucide-react";
 
 import { useThreadShell } from "~/state/entities";
+import { environmentProviderEntriesAtom } from "~/state/server";
+import { ThreadProviderStack } from "./ThreadProviderStack";
 import { ContextChip, ContextChipLabel } from "./ContextChip";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
@@ -16,6 +19,7 @@ export function ThreadContextChip(props: {
 }) {
   const { environmentId, threadId } = props.record;
   const shell = useThreadShell({ environmentId, threadId });
+  const providerEntryByInstanceId = useAtomValue(environmentProviderEntriesAtom(environmentId));
   const title = shell?.title?.trim() || props.record.title;
   return (
     <Tooltip>
@@ -30,6 +34,15 @@ export function ThreadContextChip(props: {
           >
             <MessagesSquareIcon />
             <ContextChipLabel>{title}</ContextChipLabel>
+            {shell ? (
+              <span aria-hidden className="inline-flex shrink-0 items-center">
+                <ThreadProviderStack
+                  thread={shell}
+                  providerEntryByInstanceId={providerEntryByInstanceId}
+                  size="compact"
+                />
+              </span>
+            ) : null}
           </ContextChip>
         }
       />

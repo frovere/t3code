@@ -1,4 +1,5 @@
 import { formatProviderSkillDisplayName } from "@t3tools/shared/inlineSkills";
+import { formatComposerThreadIdLabel } from "@t3tools/client-runtime/composerThreadItems";
 import {
   resolveProviderSkillSourceKind,
   type ProviderSkillSourceKind,
@@ -26,6 +27,7 @@ import { type ComposerSlashCommand, type ComposerTriggerKind } from "../../compo
 import { cn } from "~/lib/utils";
 import { Badge } from "../ui/badge";
 import { Command, CommandGroup, CommandItem, CommandList } from "../ui/command";
+import { ScopedThreadProviderStack } from "../ThreadProviderStack";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { ComposerBanner } from "./ComposerBanner";
 import { resolvePullRequestState } from "../pullRequest/pullRequestPresentation";
@@ -148,7 +150,9 @@ export const ComposerCommandMenu = memo(function ComposerCommandMenu(props: {
                     ? "No skills found. Try / to browse provider commands."
                     : props.triggerKind === "path"
                       ? "No matching files or folders."
-                      : "No matching command."))}
+                      : props.triggerKind === "thread"
+                        ? "No matching threads."
+                        : "No matching command."))}
             </p>
           </div>
         )}
@@ -208,7 +212,12 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         />
       ) : null}
       <span className="flex min-w-0 flex-1 items-center gap-2">
-        <span className="min-w-0 max-w-[45%] shrink-0 truncate font-sans text-xs font-medium">
+        <span
+          className={cn(
+            "min-w-0 truncate font-sans text-xs font-medium",
+            props.item.type === "thread" ? "flex-1" : "max-w-[45%] shrink-0",
+          )}
+        >
           {isSlashSkill ? (
             <>
               <span className="text-secondary-label">/skill:</span>
@@ -218,9 +227,21 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
             props.item.label
           )}
         </span>
-        <span className="min-w-0 flex-1 truncate text-left text-secondary-label text-xs">
-          {props.item.description}
-        </span>
+        {props.item.type === "thread" ? (
+          <>
+            <span
+              className="shrink-0 text-secondary-label text-xs"
+              aria-label={props.item.thread.threadId}
+            >
+              {formatComposerThreadIdLabel(props.item.thread.threadId)}
+            </span>
+            <ScopedThreadProviderStack threadRef={props.item.thread} />
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-left text-secondary-label text-xs">
+            {props.item.description}
+          </span>
+        )}
         {skillSourceKind ? (
           <SkillSourceBadge
             kind={skillSourceKind}
@@ -239,6 +260,7 @@ export function composerSuggestionOptionId(listId: string, itemId: string): stri
 
 const LISTBOX_LABEL_BY_TRIGGER: Record<ComposerTriggerKind, string> = {
   path: "Files and folders",
+  thread: "Threads",
   "pull-request": "Pull requests",
   "slash-command": "Commands",
   skill: "Skills",

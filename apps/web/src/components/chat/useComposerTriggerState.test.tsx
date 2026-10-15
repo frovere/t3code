@@ -124,6 +124,15 @@ describe("composer suggestion dismissal", () => {
     expect(composer.trigger?.query).toBe("");
   });
 
+  it("keeps a dismissed thread query closed while typing spaces, and opens a fresh opener", async () => {
+    await updatePrompt("[[Fix");
+    await act(() => composer.dismissTrigger(composer.trigger));
+    await updatePrompt("[[Fix login flow");
+    expect(composer.trigger).toBeNull();
+    await updatePrompt("[[Fix login flow]] [[Other");
+    expect(composer.trigger).toMatchObject({ kind: "thread", query: "Other" });
+  });
+
   it("clears dismissal when switching drafts or pending questions", async () => {
     await act(() => composer.dismissTrigger(composer.trigger));
     const candidate = detectComposerTrigger(initialPrompt, initialPrompt.length);
@@ -133,13 +142,16 @@ describe("composer suggestion dismissal", () => {
     expect(composer.resolveTrigger(candidate)).toEqual(candidate);
   });
 
-  it.each(["/plan", "$skill", "#123"])("also dismisses %s suggestions", async (text) => {
-    await updatePrompt(text);
-    await act(() => composer.dismissTrigger(composer.trigger));
-    await updatePrompt(`${text}x`);
+  it.each(["/plan", "$skill", "#123", "[[Fix login"])(
+    "also dismisses %s suggestions",
+    async (text) => {
+      await updatePrompt(text);
+      await act(() => composer.dismissTrigger(composer.trigger));
+      await updatePrompt(`${text}x`);
 
-    expect(composer.trigger).toBeNull();
-    await updatePrompt("@src");
-    expect(composer.trigger?.kind).toBe("path");
-  });
+      expect(composer.trigger).toBeNull();
+      await updatePrompt("@src");
+      expect(composer.trigger?.kind).toBe("path");
+    },
+  );
 });

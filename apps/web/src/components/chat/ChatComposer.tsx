@@ -87,6 +87,8 @@ import {
   type ComposerSubmissionIntent,
   collapseExpandedComposerCursor,
   composerSubmissionIntentForKey,
+  composerMenuActionForKey,
+  composerThreadReplacementRangeEnd,
   composerStateAtPromptEnd,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
@@ -2633,8 +2635,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const settledPullRequestTextQuery =
     pullRequestTextQuery === debouncedPullRequestTextQuery ? pullRequestTextQuery : null;
   const isPathTrigger = composerTriggerKind === "path";
-  // Thread shells only feed `@` thread matches, so skip shell updates otherwise.
-  const environmentThreadShells = useThreadShells(isPathTrigger);
+  // Subscribe to thread shells only while either thread search is active.
+  const environmentThreadShells = useThreadShells(
+    isPathTrigger || composerTriggerKind === "thread",
+  );
   const workspaceEntries = useComposerPathSearch({
     environmentId,
     cwd: isPathTrigger ? gitCwd : null,
@@ -2723,6 +2727,15 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
 
   const composerMenuItems = useMemo<ComposerCommandItem[]>(() => {
     if (!composerTrigger) return [];
+    if (composerTrigger.kind === "thread") {
+      return matchComposerThreadItems({
+        shells: environmentThreadShells,
+        environmentId,
+        excludeThreadId: activeThreadId,
+        query: composerTrigger.query,
+        mode: "thread",
+      });
+    }
     if (composerTrigger.kind === "path") {
       // Threads only surface for a typed query so `@` alone stays a file picker. A title match
       // is far more specific than a fuzzy path hit, so the few threads lead the list.
@@ -2976,6 +2989,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         pullRequestTriggerNumber !== debouncedPullRequestNumber ||
         exactPullRequestLookup.isPending));
   const composerMenuEmptyState = useMemo(() => {
+    if (composerTriggerKind === "thread") return "No matching threads.";
     if (composerTriggerKind === "skill") {
       return "No skills found. Try / to browse provider commands.";
     }
@@ -4105,14 +4119,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       return;
     }
     if (item.type === "thread") {
-      if (trigger.kind !== "path") return;
+      if (trigger.kind !== "path" && trigger.kind !== "thread") return;
       const shell = readThreadShell(item.thread);
       if (!shell) return;
       const record = threadContextRecord(item.thread, shell.title);
       const replacement = `${formatInlineContextReference(threadContextReference(record))} `;
       const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
         snapshot.value,
-        trigger.rangeEnd,
+        composerThreadReplacementRangeEnd(snapshot.value, trigger),
         replacement,
       );
       const applied = applyPromptReplacement(trigger.rangeStart, replacementRangeEnd, replacement, {
@@ -4404,28 +4418,32 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     const { trigger } = resolveActiveComposerTrigger();
     const menuIsActive =
       !isLiteralPendingAnswer && (composerMenuOpenRef.current || trigger !== null);
-    if (key === "Escape") {
-      if (!menuIsActive || event.isComposing || event.keyCode === 229) return false;
+    const currentItems = composerMenuItemsRef.current;
+    const selectedItem = activeComposerMenuItemRef.current ?? currentItems[0];
+    const menuAction =
+      event.isComposing || event.keyCode === 229
+        ? null
+        : composerMenuActionForKey({
+            key,
+            triggerKind: trigger?.kind ?? composerTriggerKind,
+            menuIsActive,
+            hasItems: selectedItem !== undefined,
+            submissionIntent,
+          });
+    if (menuAction === "dismiss") {
       dismissComposerTrigger(trigger);
       composerMenuOpenRef.current = false;
       return true;
     }
-    if (menuIsActive && (submissionIntent === null || submissionIntent === "foreground")) {
-      const currentItems = composerMenuItemsRef.current;
-      const selectedItem = activeComposerMenuItemRef.current ?? currentItems[0];
-      if (key === "ArrowDown" && currentItems.length > 0) {
-        nudgeComposerMenuHighlight("ArrowDown");
-        return true;
-      }
-      if (key === "ArrowUp" && currentItems.length > 0) {
-        nudgeComposerMenuHighlight("ArrowUp");
-        return true;
-      }
-      if ((key === "Enter" || key === "Tab") && selectedItem) {
-        onSelectComposerItem(selectedItem);
-        return true;
-      }
+    if (menuAction === "next" || menuAction === "previous") {
+      nudgeComposerMenuHighlight(menuAction === "next" ? "ArrowDown" : "ArrowUp");
+      return true;
     }
+    if (menuAction === "select" && selectedItem) {
+      onSelectComposerItem(selectedItem);
+      return true;
+    }
+    if (menuAction === "consume") return true;
     if ((key === "ArrowUp" || key === "ArrowDown") && submissionIntent === null) {
       return navigatePromptHistory(key === "ArrowUp" ? "backward" : "forward", event);
     }

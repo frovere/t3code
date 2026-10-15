@@ -17,6 +17,8 @@ import {
   clampCollapsedComposerCursor,
   collapseExpandedComposerCursor,
   composerSubmissionIntentForKey,
+  composerMenuActionForKey,
+  composerThreadReplacementRangeEnd,
   composerStateAtPromptEnd,
   detectComposerTrigger,
   expandCollapsedComposerCursor,
@@ -246,6 +248,51 @@ describe("composerSubmissionIntentForKey", () => {
 });
 
 describe("detectComposerTrigger", () => {
+  it.each(["[[", "[[Fix login flow", "Compare [[Fix login flow", "old\n\t[[Fix login flow"])(
+    "detects a dedicated multiword thread query in %j",
+    (text) => {
+      const start = text.lastIndexOf("[[");
+      expect(detectComposerTrigger(text, text.length)).toEqual({
+        kind: "thread",
+        query: text.slice(start + 2),
+        rangeStart: start,
+        rangeEnd: text.length,
+      });
+    },
+  );
+
+  it.each(["word[[title", "[[title]", "[[title]]", "[[title\ncontinued", "[[title\rcontinued"])(
+    "leaves closed, embedded, and multiline brackets literal: %j",
+    (text) => {
+      expect(detectComposerTrigger(text, text.length)).toBeNull();
+    },
+  );
+
+  it("uses the nearest boundary opener on the current line", () => {
+    const text = "[[older [[Fix login";
+    expect(detectComposerTrigger(text, text.length)).toMatchObject({
+      kind: "thread",
+      query: "Fix login",
+      rangeStart: 8,
+    });
+  });
+
+  it("consumes adjacent closing brackets only when a thread is explicitly selected", () => {
+    const text = "Compare [[Fix login]] later";
+    const cursor = text.indexOf("]]");
+    const trigger = detectComposerTrigger(text, cursor)!;
+    expect(
+      replaceTextRange(
+        text,
+        trigger.rangeStart,
+        composerThreadReplacementRangeEnd(text, trigger),
+        "CHIP ",
+      ).text,
+    ).toBe("Compare CHIP  later");
+    expect(composerThreadReplacementRangeEnd("[[Fix]", { ...trigger, rangeEnd: 5 })).toBe(5);
+    expect(detectComposerTrigger(text, cursor + 2)).toBeNull();
+  });
+
   it.each(["Use ", "Use\t", "Use\n  "])("detects inline slash skills after %j", (prefix) => {
     const text = `${prefix}/skill:review later`;
     const cursor = `${prefix}/skill:review`.length;
@@ -870,5 +917,52 @@ describe("literal editor answer cursor state", () => {
       });
     }
     expect(composerStateAtPromptEnd("Use $my").trigger?.kind).toBe("skill");
+  });
+});
+
+describe("composerMenuActionForKey", () => {
+  const threadSearch = {
+    menuIsActive: true,
+    triggerKind: "thread" as const,
+    hasItems: true,
+    submissionIntent: null,
+  };
+  it.each([null, "foreground", "background", "alternate"] as const)(
+    "selects instead of sending Enter with %s submission intent",
+    (submissionIntent) => {
+      expect(composerMenuActionForKey({ ...threadSearch, key: "Enter", submissionIntent })).toBe(
+        "select",
+      );
+      expect(
+        composerMenuActionForKey({
+          ...threadSearch,
+          key: "Enter",
+          submissionIntent,
+          hasItems: false,
+        }),
+      ).toBe("consume");
+    },
+  );
+  it.each([
+    ["ArrowDown", "next"],
+    ["ArrowUp", "previous"],
+    ["Tab", "select"],
+    ["Escape", "dismiss"],
+  ])("handles %s within the thread search", (key, action) => {
+    expect(composerMenuActionForKey({ ...threadSearch, key })).toBe(action);
+  });
+  it("releases Enter after dismissal and preserves legacy empty picker behavior", () => {
+    expect(
+      composerMenuActionForKey({ ...threadSearch, key: "Enter", menuIsActive: false }),
+    ).toBeNull();
+    expect(
+      composerMenuActionForKey({
+        ...threadSearch,
+        key: "Enter",
+        triggerKind: "path",
+        hasItems: false,
+        submissionIntent: "foreground",
+      }),
+    ).toBeNull();
   });
 });

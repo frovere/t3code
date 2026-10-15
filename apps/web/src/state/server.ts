@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  type EnvironmentId,
   type EditorId,
   type EnvironmentTheme,
   type ServerConfig,
@@ -16,6 +17,11 @@ import { mergeWithDefaultKeybindings } from "@t3tools/shared/keybindings";
 import * as Option from "effect/Option";
 import { AsyncResult, Atom } from "effect/reactivity";
 
+import {
+  applyProviderInstanceSettings,
+  deriveProviderInstanceEntries,
+  type ProviderInstanceEntry,
+} from "../providerInstances";
 import { environmentCatalog } from "../connection/catalog";
 import { connectionAtomRuntime } from "../connection/runtime";
 import { primaryEnvironmentIdAtom } from "./primaryEnvironment";
@@ -33,6 +39,20 @@ export const serverEnvironment = createServerEnvironmentAtoms(connectionAtomRunt
   usageLimitSources: true,
   usageLimitsCommand: true,
 });
+/** One shared provider lookup per environment for referenced thread indicators. */
+export const environmentProviderEntriesAtom = Atom.family((environmentId: EnvironmentId) =>
+  Atom.make((get): ReadonlyMap<string, ProviderInstanceEntry> => {
+    const config = get(serverEnvironment.configValueAtom(environmentId));
+    if (config === null) return new Map();
+    const entries = applyProviderInstanceSettings(
+      deriveProviderInstanceEntries(config.providers),
+      config.settings,
+      null,
+    );
+    return new Map(entries.map((entry) => [entry.instanceId, entry]));
+  }).pipe(Atom.withLabel(`web-environment-provider-entries:${environmentId}`)),
+);
+
 /** Updates a host whose protocol is too old for this client to connect to. */
 export const updateOutdatedServer = createOutdatedServerUpdateCommand(connectionAtomRuntime);
 export const environmentServerConfigsAtom = createEnvironmentServerConfigsAtom({

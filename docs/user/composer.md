@@ -91,12 +91,12 @@ instance:
 
 ```json
 {
-  "providerInstances": {
-    "codex": {
-      "driver": "codex",
-      "config": { "customModels": [{ "slug": "gpt-5.5", "name": "Team GPT" }] }
+    "providerInstances": {
+        "codex": {
+            "driver": "codex",
+            "config": { "customModels": [{ "slug": "gpt-5.5", "name": "Team GPT" }] }
+        }
     }
-  }
 }
 ```
 
@@ -263,11 +263,14 @@ by any part of its pull request numbers. A complete number is also resolved dire
 pull request is older than the recent list. Type a single word after `#` to search pull requests in
 the repository by text. Choose a result to insert it as a chip.
 
-Another thread can be context too. Type `@` followed by part of its title to pick one from
-the same server, or on web and desktop drag a thread out of the sidebar and drop it on the
-composer; a multi-selection drops together. The chip shows the thread's current title and
-opens it when selected. Your prompt only carries a reference: the agent reads the thread's
-history on demand, so attaching a long thread costs nothing until the agent looks. Attaching a
+Another thread can be context too. On web and desktop, type `[[` to browse your five most
+recent threads on the same server, across projects. Continue with part of a title or thread ID
+to search, then choose a result to attach it. Titles can include spaces. Press Escape to keep
+the text without attaching anything; typing `[[title]]` alone stays plain text. You can also
+type `@` followed by part of a title on any client, or on web and desktop drag a thread out of
+the sidebar and drop it on the composer; a multi-selection drops together. The chip shows the
+thread's current title and opens it when selected. Your prompt only carries a reference: the
+agent reads the thread's history on demand, so attaching a long thread costs nothing until the agent looks. Attaching a
 thread does not change it, and the agent cannot send messages to it unless you ask.
 
 Dropping a thread from another environment attaches a saved transcript file. The source

@@ -11,7 +11,7 @@ import {
 
 import { resolveShortcutCommand, type ShortcutEventLike } from "./keybindings";
 
-export type ComposerTriggerKind = "path" | "pull-request" | "slash-command" | "skill";
+export type ComposerTriggerKind = "path" | "thread" | "pull-request" | "slash-command" | "skill";
 export type ComposerSlashCommand = "model" | "plan" | "default";
 export type ComposerSubmissionIntent = "foreground" | "background" | "alternate";
 
@@ -258,6 +258,19 @@ export function isCollapsedCursorAdjacentToInlineToken(
 
 export function detectComposerTrigger(text: string, cursorInput: number): ComposerTrigger | null {
   const cursor = clampCursor(text, cursorInput);
+  const lineStart =
+    Math.max(text.lastIndexOf("\n", cursor - 1), text.lastIndexOf("\r", cursor - 1)) + 1;
+  const lineBeforeCursor = text.slice(lineStart, cursor);
+  for (
+    let opener = lineBeforeCursor.lastIndexOf("[[");
+    opener >= 0;
+    opener = lineBeforeCursor.lastIndexOf("[[", opener - 1)
+  ) {
+    if (opener > 0 && !isWhitespace(lineBeforeCursor[opener - 1] ?? "")) continue;
+    const query = lineBeforeCursor.slice(opener + 2);
+    if (query.includes("]")) break;
+    return { kind: "thread", query, rangeStart: lineStart + opener, rangeEnd: cursor };
+  }
   const tokenStart = tokenStartForCursor(text, cursor);
   const token = text.slice(tokenStart, cursor);
   if (token.startsWith("/")) {
@@ -353,4 +366,31 @@ export function replaceTextRange(
   const safeEnd = Math.max(safeStart, Math.min(text.length, rangeEnd));
   const nextText = `${text.slice(0, safeStart)}${replacement}${text.slice(safeEnd)}`;
   return { text: nextText, cursor: safeStart + replacement.length };
+}
+
+/** Selecting a thread replaces its opener and any closing brackets already beside the caret. */
+export function composerThreadReplacementRangeEnd(text: string, trigger: ComposerTrigger): number {
+  return trigger.kind === "thread" && text.startsWith("]]", trigger.rangeEnd)
+    ? trigger.rangeEnd + 2
+    : trigger.rangeEnd;
+}
+
+/** Resolve suggestion keys before sending, including an empty thread search. */
+export function composerMenuActionForKey(input: {
+  key: string;
+  triggerKind: ComposerTriggerKind | null;
+  menuIsActive: boolean;
+  hasItems: boolean;
+  submissionIntent: ComposerSubmissionIntent | null;
+}): "dismiss" | "next" | "previous" | "select" | "consume" | null {
+  if (!input.menuIsActive) return null;
+  if (input.key === "Escape") return "dismiss";
+  if (input.triggerKind === "thread" && input.key === "Enter") {
+    return input.hasItems ? "select" : "consume";
+  }
+  if (input.submissionIntent !== null && input.submissionIntent !== "foreground") return null;
+  if (!input.hasItems) return null;
+  if (input.key === "ArrowDown") return "next";
+  if (input.key === "ArrowUp") return "previous";
+  return input.key === "Enter" || input.key === "Tab" ? "select" : null;
 }
